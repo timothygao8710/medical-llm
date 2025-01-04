@@ -10,8 +10,7 @@ batch_size = 8
 redownload = False
 ######################
 
-token = "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" # Do not commit lol just doing this for now
-login(token)
+
 
 def generate_answer(dataset, question_index, max_length=500):
     """
