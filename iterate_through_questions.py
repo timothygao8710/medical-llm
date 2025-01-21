@@ -14,10 +14,12 @@ import numpy as np
 
 ##### SETTINGS #####
 cache_dir = '/tmp'
-model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+# model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+model_name = "medalpaca/medalpaca-7b"
 possible_outputs = ["A", "B", "C", "D", "E", "F", "G", "H"]
 batch_size = 8
-redownload = False
+# redownload = False
+redownload = True
 data_outpath = './data/test'
 ######################
 
@@ -38,7 +40,7 @@ temp = {'A' : 0, 'B' : 1, 'C' : 2, 'D' : 3, 'E' : 4, 'F' : 5, 'G' : 6, 'H' : 7}
 with tqdm(total=tot_questions) as pbar:
     for row in range(tot_questions):
         cor_ans = get_correct_answer(row)
-        query = get_row_query_cot(row)        
+        query = get_row_query_cot(row)
         response, entropies = generate_response(query)
         
         print(query, response, entropies)

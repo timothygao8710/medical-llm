@@ -96,7 +96,7 @@ def generate(prompt, max_length=200):
         max_length=max_length,
         num_return_sequences=1,
         do_sample=True,
-        temperature=0.001,
+        temperature=0.0001,
         pad_token_id=tokenizer.eos_token_id
     )
     
@@ -216,6 +216,8 @@ if __name__ == "__main__":
     # print(get_next_token_test(prompt))
     
     print(generate(prompt, max_length=400))
+    
+    print(generate_response(prompt, max_length=400))
     
     # chat()
     
