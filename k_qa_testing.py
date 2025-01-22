@@ -10,8 +10,6 @@ batch_size = 8
 redownload = False
 ######################
 
-
-
 def generate_answer(dataset, question_index, max_length=500):
     """
     Creates a LLM prompt given the K_QA question_index

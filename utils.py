@@ -14,7 +14,7 @@ def get_entropy_from_probabilities(probabilities):
     return entropy
 
 def get_probs_from_outputs(arr):
-    mp = {}
+    mp = {} # frequency map
     for i in arr:
         if i not in mp:
             mp[i] = 0
