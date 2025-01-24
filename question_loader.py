@@ -69,16 +69,7 @@ def get_row_query_cot(i):
     query = '''
 You are an extremely experienced and knowledgeable medical professional answering a question in your domain.
 
-Think step-by-step using this format:
-
-## Step 1: Analyzing Situation
-[Brief explanation and reasoning]
-
-## Step 2: Considering Answer Choices
-[Brief explanation and reasoning]
-
-## Step 3: Arriving at Final Answer
-[Brief explanation and reasoning]
+Think step-by-step to answer the following question:\n\n
 '''
     
     query += 'Question -\n\n' + get_row_question(i) + '\n\nChoices -\n\n' + getOptionsString(get_row_options_dict(i), False)
@@ -86,11 +77,6 @@ Think step-by-step using this format:
     query += '\n'
     
     query += '''
-Regardless of steps, you should always conclude with:
-
-Therefore, the final answer is: [answer]. I hope it is correct.
-
-Where [answer] is the letter of the correct answer that you have chosen. YOU ARE RESPONDING, NOT ME. DO NOT WAIT FOR MY RESPONSE.
 '''
     
     return query     
