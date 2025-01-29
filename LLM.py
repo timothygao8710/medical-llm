@@ -7,7 +7,8 @@ from utils import get_entropy_from_probabilities
 
 ##### SETTINGS #####
 cache_dir = '/tmp'
-model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+# model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+model_name = "gpt2"
 possible_outputs = ["A", "B", "C", "D", "E", "F", "G", "H"]
 # possible_outputs = ["Yes", "No"]
 batch_size = 8
@@ -15,13 +16,15 @@ redownload = False
 data_outpath = './data/all_entropies'
 ######################
 
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
 if redownload:
     model_cache_path = os.path.join(cache_dir, model_name)
     if os.path.exists(model_cache_path):
         os.rmdir(model_cache_path)
 
-tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
-model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, torch_dtype=torch.float16, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
 tokenizer.pad_token = tokenizer.eos_token
 
 EOS_TOKEN = tokenizer.eos_token
@@ -30,7 +33,7 @@ def torch_to_numpy(torch_tensor):
     return torch_tensor.detach().cpu().numpy()
 
 def get_next_token_fast(prompt):
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    inputs = tokenizer(prompt, return_tensors="pt").to(DEVICE)
     allowed_tokens = tokenizer.convert_tokens_to_ids(possible_outputs)
     with torch.no_grad():
         outputs = model(**inputs)
@@ -42,7 +45,7 @@ def get_next_token_fast(prompt):
         return np.take(possible_outputs, torch_to_numpy(sorted_indices)), torch_to_numpy(sorted_probs)
 
 def get_any_next_token_greedy(prompt: str):
-    input_ids = tokenizer(prompt, return_tensors="pt").to(model.device)
+    input_ids = tokenizer(prompt, return_tensors="pt").to(DEVICE)
     outputs = model(**input_ids)
     logits = outputs.logits[0, -1, :]
     next_token_id = torch.argmax(logits).item()
@@ -53,10 +56,10 @@ def get_any_next_token_greedy(prompt: str):
     return tokenizer.decode([next_token_id]), get_entropy_from_probabilities(torch_to_numpy(F.softmax(logits, dim=-1)))
 
 def get_next_token(prompt_batch, top_k=len(possible_outputs)):
-    inputs = tokenizer(prompt_batch, padding = True, return_tensors="pt").to(model.device)
+    inputs = tokenizer(prompt_batch, padding = True, return_tensors="pt").to(DEVICE)
 
     allowed_tokens = tokenizer.convert_tokens_to_ids(possible_outputs)
-    logits_bias = torch.full((len(prompt_batch), model.config.vocab_size), -float('inf')).to(model.device)
+    logits_bias = torch.full((len(prompt_batch), model.config.vocab_size), -float('inf')).to(DEVICE)
     logits_bias[:, allowed_tokens] = 0
 
     # print("Shape of input_ids:", inputs.input_ids.shape)
@@ -88,7 +91,7 @@ def get_next_token(prompt_batch, top_k=len(possible_outputs)):
     return top_k_responses, torch_to_numpy(top_k_probs)
 
 def generate(prompt, max_length=200):
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    inputs = tokenizer(prompt, return_tensors="pt").to(DEVICE)
     
     # Generate until EOS token
     outputs = model.generate(
@@ -106,7 +109,7 @@ def generate(prompt, max_length=200):
     return generated_text
 
 def get_next_token_test(prompt, layer=-1):
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    inputs = tokenizer(prompt, return_tensors="pt").to(DEVICE)
 
     print("Shape of input_ids:", inputs.input_ids.shape)
     print("Shape of attention_mask:", inputs.attention_mask.shape)
@@ -217,7 +220,7 @@ if __name__ == "__main__":
     
     print(generate(prompt, max_length=400))
     
-    print(generate_response(prompt, max_length=400))
+    print(generate_response(prompt, max_tokens=400))
     
     # chat()
     
