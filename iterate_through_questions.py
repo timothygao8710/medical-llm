@@ -14,13 +14,13 @@ import numpy as np
 
 ##### SETTINGS #####
 cache_dir = '/tmp'
-# model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
-model_name = "medalpaca/medalpaca-7b"
+model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+# model_name = "medalpaca/medalpaca-7b"
 possible_outputs = ["A", "B", "C", "D", "E", "F", "G", "H"]
 batch_size = 8
 # redownload = False
 redownload = True
-data_outpath = './data/test'
+data_outpath = './LLM_reults/cot'
 ######################
 
 if redownload:
@@ -28,7 +28,7 @@ if redownload:
     if os.path.exists(model_cache_path):
         os.rmdir(model_cache_path)
 
-tot_questions = 2000
+tot_questions = 20
 # tot_questions = get_data_len()
 print(tot_questions)
 
