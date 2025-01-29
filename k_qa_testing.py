@@ -1,14 +1,7 @@
 from utils import *
-from huggingface_hub import login
+from login import huggingface_login
 from datasets import load_from_disk
-from LLM import generate
-
-##### SETTINGS #####
-cache_dir = '/tmp'
-model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
-batch_size = 8
-redownload = False
-######################
+from semantic_uncertainty.uncertainty.models.huggingface_models import HuggingfaceModel
 
 def generate_answer(dataset, question_index, max_length=500):
     """
@@ -100,6 +93,12 @@ def hall_score(dataset, question_index, model_answer):
 
 # Implement Factuality ideas from this: https://arxiv.org/pdf/2406.09714
 if __name__ == "__main__":
+    
+    huggingface_login()
+    
+    model_name = "Meta-Llama-3-8B-Instruct"
+    
+    model = HuggingfaceModel(model_name, max_new_tokens=100)
     
     k_qa = load_from_disk("data_clean/k_qa.hf")
     

@@ -5,6 +5,7 @@ from collections import Counter
 import torch
 
 import accelerate
+import os
 
 from transformers import AutoTokenizer
 from transformers import AutoConfig
@@ -15,8 +16,8 @@ from transformers import StoppingCriteriaList
 from huggingface_hub import snapshot_download
 
 
-from uncertainty.models.base_model import BaseModel
-from uncertainty.models.base_model import STOP_SEQUENCES
+from semantic_uncertainty.uncertainty.models.base_model import BaseModel
+from semantic_uncertainty.uncertainty.models.base_model import STOP_SEQUENCES
 
 
 class StoppingCriteriaSub(StoppingCriteria):
@@ -107,6 +108,8 @@ class HuggingfaceModel(BaseModel):
             if 'Llama-2' in model_name:
                 base = 'meta-llama'
                 model_name = model_name + '-hf'
+            elif 'Llama-3' in model_name:
+                base = 'meta-llama'
             else:
                 base = 'huggyllama'
 
@@ -116,13 +119,14 @@ class HuggingfaceModel(BaseModel):
 
             llama65b = '65b' in model_name and base == 'huggyllama'
             llama2_70b = '70b' in model_name and base == 'meta-llama'
+            llama3_8b = '8B' in model_name and base == 'meta-llama'
 
             if ('7b' in model_name or '13b' in model_name) or eightbit:
                 self.model = AutoModelForCausalLM.from_pretrained(
                     f"{base}/{model_name}", device_map="auto",
                     max_memory={0: '80GIB'}, **kwargs,)
 
-            elif llama2_70b or llama65b:
+            elif llama2_70b or llama65b or llama3_8b:
                 path = snapshot_download(
                     repo_id=f'{base}/{model_name}',
                     allow_patterns=['*.json', '*.model', '*.safetensors'],
@@ -140,11 +144,11 @@ class HuggingfaceModel(BaseModel):
                     dtype='float16'
                 )
                 device_map = remove_split_layer(device_map)
-                full_model_device_map = {f"model.{k}": v for k, v in device_map.items()}
-                full_model_device_map["lm_head"] = 0
+                # full_model_device_map = {f"model.{k}": v for k, v in device_map.items()}
+                # full_model_device_map["lm_head"] = 0
 
                 self.model = accelerate.load_checkpoint_and_dispatch(
-                    self.model, path, device_map=full_model_device_map,
+                    self.model, path, device_map="auto", offload_folder=f"/tmp/{path}",
                     dtype='float16', skip_keys='past_key_values')
             else:
                 raise ValueError

@@ -26,6 +26,7 @@ idna==3.10
 Jinja2==3.1.5
 jiter==0.8.2
 MarkupSafe==3.0.2
+-e git+ssh://git@github.com/timothygao8710/medical-llm.git@df6d65c7bebb06e7a95cabfc276a8efd684233bb#egg=medical_llm
 mpmath==1.3.0
 multidict==6.1.0
 multiprocess==0.70.16
