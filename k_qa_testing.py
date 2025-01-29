@@ -1,7 +1,7 @@
 from utils import *
 from huggingface_hub import login
 from datasets import load_from_disk
-# from LLM import generate
+from LLM import generate
 
 ##### SETTINGS #####
 cache_dir = '/tmp'
