@@ -1,9 +1,55 @@
 from utils import *
 from login import huggingface_login
 from datasets import load_from_disk
-from semantic_uncertainty.uncertainty.models.huggingface_models import HuggingfaceModel
+from semantic_uncertainty.uncertainty.models.base_model import BaseModel
+from semantic_uncertainty.uncertainty.models.huggingface_models import HuggingfaceModel, StoppingCriteriaSub
+import semantic_uncertainty.uncertainty.uncertainty_measures.semantic_entropy as se
+from transformers import AutoModelForCausalLM, AutoTokenizer, StoppingCriteriaList
 
-def generate_answer(dataset, question_index, max_length=500):
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct"
+
+class KQAModel(BaseModel):
+    def __init__(self, model_name, max_new_tokens=1000):
+        self.max_new_tokens = max_new_tokens
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
+    
+    def predict(self, input_data, temperature):
+        inputs = self.tokenizer(input_data, return_tensors="pt").to(DEVICE)
+        
+        if 'token_type_ids' in inputs:
+            del inputs['token_type_ids']
+        pad_token_id = self.tokenizer.eos_token_id
+
+        with torch.no_grad():
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                return_dict_in_generate=True,
+                output_scores=True,
+                output_hidden_states=True,
+                temperature=temperature,
+                do_sample=True,
+                pad_token_id=pad_token_id,
+            )
+            print(outputs)
+            
+        self.token_limit = 4096
+        if len(outputs.sequences[0]) > self.token_limit:
+            raise ValueError(
+                'Generation exceeding token limit %d > %d',
+                len(outputs.sequences[0]), self.token_limit)
+
+        full_answer = self.tokenizer.decode(outputs.sequences[0], skip_special_tokens=True)
+
+        return full_answer
+    
+    def get_p_true(self, input_data):
+        pass
+
+def generate_answer(dataset, model: HuggingfaceModel, question_index):
     """
     Creates a LLM prompt given the K_QA question_index
     """
@@ -18,7 +64,7 @@ def generate_answer(dataset, question_index, max_length=500):
     {question}
     """
     print(prompt)
-    model_answer = generate(prompt, max_length) #
+    model_answer = model.predict(prompt, 0.1)
     return model_answer
 
 def check_entailment(premise, hypothesis):
@@ -96,17 +142,14 @@ if __name__ == "__main__":
     
     huggingface_login()
     
-    model_name = "Meta-Llama-3-8B-Instruct"
+    entailment_model = se.EntailmentDeberta()
+    qa_model = KQAModel(MODEL_NAME, max_new_tokens=100)
     
-    model = HuggingfaceModel(model_name, max_new_tokens=100)
+    k_qa = load_from_disk("~/medical-llm/data_clean/k_qa.hf")
     
-    k_qa = load_from_disk("data_clean/k_qa.hf")
+    response = generate_answer(k_qa, qa_model, 0)
     
-    print(k_qa[0])
-    
-    # model_answer = generate_answer(k_qa, 0)
-    
-    # print(model_answer)
+    print(response)
     
     # comprehensiveness = comp_score(k_qa, 0, model_answer)
     

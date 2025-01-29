@@ -7,8 +7,7 @@ from utils import get_entropy_from_probabilities
 
 ##### SETTINGS #####
 cache_dir = '/tmp'
-# model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
-model_name = "gpt2"
+model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
 possible_outputs = ["A", "B", "C", "D", "E", "F", "G", "H"]
 # possible_outputs = ["Yes", "No"]
 batch_size = 8
