@@ -62,10 +62,9 @@ class EntailmentLLM(BaseEntailment):
 
         api = wandb.Api()
         run = api.run(entailment_cache_id)
-        run.file(self.entailment_file).download(
-            replace=True, exist_ok=False, root=wandb.run.dir)
+        run.file(self.entailment_file).download(replace=True, exist_ok=False, root=wandb.run.dir)
 
-        with open(f'{wandb.run.dir}/{self.entailment_file}', "rb") as infile:
+        with open(f"{wandb.run.dir}/{self.entailment_file}", "rb") as infile:
             return pickle.load(infile)
 
     def save_prediction_cache(self):
@@ -170,7 +169,6 @@ def get_semantic_ids(strings_list, model, strict_entailment=False, example=None)
     """Group list of predictions into semantic meaning."""
 
     def are_equivalent(text1, text2):
-
         implication_1 = model.check_implication(text1, text2, example=example)
         implication_2 = model.check_implication(text2, text1, example=example)  # pylint: disable=arguments-out-of-order
         assert (implication_1 in [0, 1, 2]) and (implication_2 in [0, 1, 2])
