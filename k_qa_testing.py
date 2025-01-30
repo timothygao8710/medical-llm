@@ -1,16 +1,16 @@
 from utils import *
 from login import huggingface_login
 from datasets import load_from_disk
+import torch.nn.functional as F
 from semantic_uncertainty.uncertainty.models.base_model import BaseModel
-from semantic_uncertainty.uncertainty.models.huggingface_models import HuggingfaceModel, StoppingCriteriaSub
-import semantic_uncertainty.uncertainty.uncertainty_measures.semantic_entropy as se
-from transformers import AutoModelForCausalLM, AutoTokenizer, StoppingCriteriaList
+from semantic_uncertainty.entailment import BaseEntailment
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoModelForSequenceClassification
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct"
+MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct" 
 
 class KQAModel(BaseModel):
-    def __init__(self, model_name, max_new_tokens=1000):
+    def __init__(self, model_name, max_new_tokens):
         self.max_new_tokens = max_new_tokens
         
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -34,7 +34,6 @@ class KQAModel(BaseModel):
                 do_sample=True,
                 pad_token_id=pad_token_id,
             )
-            print(outputs)
             
         self.token_limit = 4096
         if len(outputs.sequences[0]) > self.token_limit:
@@ -49,75 +48,46 @@ class KQAModel(BaseModel):
     def get_p_true(self, input_data):
         pass
 
-def generate_answer(dataset, model: HuggingfaceModel, question_index):
+def generate_answer(dataset, model, question_index):
     """
     Creates a LLM prompt given the K_QA question_index
     """
     question = dataset[question_index]["Question"]
-    prompt = f"""
-    You are a medical professional who is willing to answer any medical-based question provided. 
-    Please respond to each question with a succinct but detailed answer, being sure to first 
-    answer the most important aspects of the question before going to less important details. 
-    Answer this question as if you were a student writing a short answer response on a test.
-    
-    Here is your question:
-    {question}
-    """
-    print(prompt)
+    prompt = "You are a medical professional who is willing to answer any medical-based question provided. " 
+    prompt += "Please respond to each question with a succinct but detailed answer, being sure to first " 
+    prompt += "answer the most important aspects of the question before going to less important details. " 
+    prompt += "Here is your question:\n"
+    prompt += question + "\n"
+    prompt += "Response:\n"
+
+    offset = len(prompt)
     model_answer = model.predict(prompt, 0.1)
-    return model_answer
+    return model_answer[offset:]
 
-def check_entailment(premise, hypothesis):
-    """
-    Checks if the premise (the model generated answer) entails the hypothesis (one of the ground truths
-    for this question). This is accomplished by asking a LLM model if this entailment is true, separate
-    from the model used to answer the original question.
-    """
-    prompt = f"""
-    You are a medical professional who is willing to help score student responses to a medical exam. Given
-    a student's answer and a ground truth, determine whether or not any aspect of the student's answer entails
-    the ground truth. That is, determine if the student accurately addresses this ground truth in their answer.
+def check_implication(model, premise, hypothesis):
+    prompt = "You are a medical professional who scoring student responses to "
+    prompt += "a medical exam. Given a student's answer and a ground truth, determine "
+    prompt += "if the student accurately addresses this ground truth in their answer.\n"
+    prompt += "Here is the ground truth:\n"
+    prompt += premise + "\n"
+    prompt += "Here is the student's answer:\n"
+    prompt += hypothesis + "\n"
+    prompt += "Respond only with 'entailment', 'contradiction', or 'neutral'. "
+    prompt += "Do not include any additional text or an explanation.\n "
+    prompt += "Response:"
     
-    Here is the student's answer:
-    {premise}
-    
-    And here is the ground truth:
-    {hypothesis}
-    
-    Simply answer 'True' if the student's answer does entail the ground truth, or 'False' otherwise.
-    Do not provide any additional reasoning.
-    """
-    print(prompt)
-    model_response = generate(prompt, max_length=5)
-    print(model_response)
-    is_entailed = model_response.split(" ")[0]
-    return bool(is_entailed)
-
-def check_contradiction(premise, hypothesis):
-    """
-    Checks if the premise (the model generated answer) contradicts the hypothesis (one of the ground truths
-    for this question). This is accomplished by asking a LLM model if this there is a contradiction, separate
-    from the model used to answer the original question.
-    """
-    prompt = f"""
-    You are a medical professional who is willing to help score student responses to a medical exam. Given
-    a student's answer and a ground truth, determine whether or not any aspect of the student's answer contradicts
-    the ground truth. If the student simply does not address this ground truth, that is not a contradiction.
-    
-    Here is the student's answer:
-    {premise}
-    
-    And here is the ground truth:
-    {hypothesis}
-    
-    Simply answer 'True' if the student's answer does contradict the ground truth, or 'False' otherwise.
-    Do not provide any additional reasoning.
-    """
-    print(prompt)
-    model_response = generate(prompt, max_length=5)
-    print(model_response)
-    is_contradicted = model_response.split(" ")[0]
-    return bool(is_contradicted)
+    offset = len(prompt)
+    model_answer = model.predict(prompt, 0.1)
+    model_answer = model_answer[offset:]
+    binary_response = model_answer.lower()[:30]
+    if 'entailment' in binary_response:
+        return 2
+    elif 'neutral' in binary_response:
+        return 1
+    elif 'contradiction' in binary_response:
+        return 0
+    else:
+        return 1
 
 def comp_score(dataset, question_index, model_answer):
     must_haves = dataset[question_index]["Must_have"]
@@ -142,18 +112,14 @@ if __name__ == "__main__":
     
     huggingface_login()
     
-    entailment_model = se.EntailmentDeberta()
-    qa_model = KQAModel(MODEL_NAME, max_new_tokens=100)
+    qa_model = KQAModel(MODEL_NAME, max_new_tokens=400)
     
     k_qa = load_from_disk("~/medical-llm/data_clean/k_qa.hf")
     
     response = generate_answer(k_qa, qa_model, 0)
     
-    print(response)
+    must_haves = k_qa[0]["Must_have"]
+    premise = must_haves[0]
     
-    # comprehensiveness = comp_score(k_qa, 0, model_answer)
-    
-    # hallucinations = hall_score(k_qa, 0, model_answer)
-    
-    # print("Comp Score:". comprehensiveness)
-    # print("Hall Score:", hallucinations)
+    entailed = check_implication(qa_model, premise, response)
+    print(entailed)
