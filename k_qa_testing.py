@@ -3,8 +3,8 @@ from login import huggingface_login
 from datasets import load_from_disk
 import torch.nn.functional as F
 from semantic_uncertainty.uncertainty.models.base_model import BaseModel
-from semantic_uncertainty.entailment import BaseEntailment
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoModelForSequenceClassification
+from semantic_uncertainty.uncertainty.uncertainty_measures.semantic_entropy import get_semantic_ids, logsumexp_by_id, predictive_entropy_rao, EntailmentGPT4
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct" 
@@ -12,7 +12,7 @@ MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct"
 class KQAModel(BaseModel):
     def __init__(self, model_name, max_new_tokens):
         self.max_new_tokens = max_new_tokens
-        
+        self.outputs = None
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)
     
@@ -34,6 +34,7 @@ class KQAModel(BaseModel):
                 do_sample=True,
                 pad_token_id=pad_token_id,
             )
+  
             
         self.token_limit = 4096
         if len(outputs.sequences[0]) > self.token_limit:
@@ -42,8 +43,16 @@ class KQAModel(BaseModel):
                 len(outputs.sequences[0]), self.token_limit)
 
         full_answer = self.tokenizer.decode(outputs.sequences[0], skip_special_tokens=True)
+        print(full_answer)
+              
+        transition_scores = self.model.compute_transition_scores(
+            outputs.sequences, outputs.scores, normalize_logits=True
+        )   
+        log_likelihood = 0
+        for score in transition_scores[0]:
+            log_likelihood += score
 
-        return full_answer
+        return full_answer, log_likelihood
     
     def get_p_true(self, input_data):
         pass
@@ -61,8 +70,8 @@ def generate_answer(dataset, model, question_index):
     prompt += "Response:\n"
 
     offset = len(prompt)
-    model_answer = model.predict(prompt, 0.1)
-    return model_answer[offset:]
+    model_answer, log_likelihood = model.predict(prompt, 0.1)
+    return model_answer[offset:], log_likelihood
 
 def check_implication(model, premise, hypothesis):
     prompt = "You are a medical professional who scoring student responses to "
@@ -89,37 +98,52 @@ def check_implication(model, premise, hypothesis):
     else:
         return 1
 
-def comp_score(dataset, question_index, model_answer):
-    must_haves = dataset[question_index]["Must_have"]
-    total_entails = 0
-    for must_have in must_haves:
-        if check_entailment(model_answer, must_have):
-            total_entails += 1
-    return total_entails / len(must_haves)
-
-# Hallucination is not a good name, consider changing this to something else
-# "Contradiction Rate"
-def hall_score(dataset, question_index, model_answer):
+def scores(dataset, question_index, model_answer):
     must_haves = dataset[question_index]["Must_have"]
     total_hallucinations = 0
     for must_have in must_haves:
-        if check_contradiction(model_answer, must_have):
+        implication = check_implication(model_answer, must_have)
+        if implication == 0: # Contradiction
             total_hallucinations += 1
-    return total_hallucinations # / len(must_haves) Think about this more
+        elif implication == 2: # Entailment
+            total_entailments += 1
+    comp_score = total_entailments / len(must_haves)
+    return comp_score, total_hallucinations # / len(must_haves) Think about this more
+
+def get_semantic_entropy(dataset, model, question_index, responses, likelihoods):
+    example = {"question": dataset[question_index]["Question"]}
+    semantic_ids = get_semantic_ids(responses, model, example=example)
+    likelihoods_per_cluster = logsumexp_by_id(semantic_ids, likelihoods)
+    sem_entropy = predictive_entropy_rao(likelihoods_per_cluster)
+    return sem_entropy
 
 # Implement Factuality ideas from this: https://arxiv.org/pdf/2406.09714
 if __name__ == "__main__":
     
     huggingface_login()
     
-    qa_model = KQAModel(MODEL_NAME, max_new_tokens=400)
+    qa_model = KQAModel(MODEL_NAME, max_new_tokens=100)
+    clustering_model = EntailmentGPT4(entailment_cache_id=None, entailment_cache_only=False)
     
     k_qa = load_from_disk("~/medical-llm/data_clean/k_qa.hf")
+    print(k_qa[0]["Question"])
+
+    responses = []
+    likelihoods = []
+    for i in range(5):
+        response, likelihood = generate_answer(k_qa, qa_model, 0)
+        responses.append(response)
+        likelihoods.append(likelihood)
+        print(f"Response {i}: {response}")
+        print(likelihood)
+        
+    sem_ent = get_semantic_entropy(k_qa, clustering_model, 0, responses, likelihoods)
+
+    print(likelihoods)
+    print(sem_ent)
     
-    response = generate_answer(k_qa, qa_model, 0)
+    # must_haves = k_qa[0]["Must_have"]
+    # premise = must_haves[0]
     
-    must_haves = k_qa[0]["Must_have"]
-    premise = must_haves[0]
-    
-    entailed = check_implication(qa_model, premise, response)
-    print(entailed)
+    # entailed = check_implication(qa_model, premise, response)
+    # print(entailed)
