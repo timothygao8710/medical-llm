@@ -67,9 +67,9 @@ def get_row_query(i):
 
 def get_row_query_cot(i):
     query = '''
-You are an extremely experienced and knowledgeable medical professional answering a question in your domain.
+You are an expert medical professional with deep knowledge and extensive experience in your domain. Carefully analyze the following question step by step, ensuring accuracy and clarity in your response. Provide a well-structured answer, using precise medical terminology when necessary.
 
-Think step-by-step to answer the following question:\n\n
+Format your final letter choice answer within <box></box> tags, like <box>C</box> or <box>F</box>\n\n
 '''
     
     query += 'Question -\n\n' + get_row_question(i) + '\n\nChoices -\n\n' + getOptionsString(get_row_options_dict(i), False)
